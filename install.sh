@@ -233,15 +233,41 @@ fi
 # 6. Start the proxy server in the background
 log_info "Starting the proxy server in the background..."
 # Use nohup to ensure it runs even if the terminal closes, and redirect output to a log file
-nohup uv run uvicorn server:app --host 0.0.0.0 --port 8082 > proxy_server.log 2>&1 & 
+source .venv/bin/activate
+nohup uvicorn server:app --host 0.0.0.0 --port 8082 > proxy_server.log 2>&1 & 
 SERVER_PID=$!
 log_success "Proxy server started in the background with PID: $SERVER_PID. Output logged to proxy_server.log"
 log_info "To stop the server, run: kill $SERVER_PID"
 
 log_success "Installation complete!"
 
+# 7. Create the 'claudebr' command
+log_info "Creating 'claudebr' command for easy access..."
+cat << 'EOF' > claudebr
+#!/bin/bash
+# Wrapper script to run Claude Code CLI with the local proxy
+ANTHROPIC_BASE_URL=http://localhost:8082 claude "$@"
+EOF
+
+chmod +x claudebr
+
+if [ -w "/usr/local/bin" ]; then
+    log_info "Attempting to install 'claudebr' to /usr/local/bin..."
+    if mv claudebr /usr/local/bin/claudebr; then
+        log_success "'claudebr' command installed successfully."
+    else
+        log_warn "Failed to move 'claudebr' to /usr/local/bin. You might need to run with sudo."
+        log_warn "You can also manually move it: sudo mv claudebr /usr/local/bin/"
+    fi
+else
+    log_warn "/usr/local/bin is not writable. You can install 'claudebr' manually:"
+    log_warn "1. Add /usr/local/bin to your PATH if it's not there."
+    log_warn "2. Run: sudo mv claudebr /usr/local/bin/"
+fi
+
+
 # --- Final Instructions ---
 echo -e "\n${BLUE}--- Next Steps ---${NC}"
-echo -e "1. ${BLUE}Run Claude Code CLI, pointing to your proxy:${NC}"
-echo -e "   ${YELLOW}ANTHROPIC_BASE_URL=http://localhost:8082 claude${NC}"
+echo -e "1. ${BLUE}Run Claude Code CLI using the new 'claudebr' command:${NC}"
+echo -e "   ${YELLOW}claudebr${NC}"
 echo -e "\n${GREEN}Enjoy using Claude Code with your chosen LLM backend!${NC}"

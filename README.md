@@ -22,18 +22,12 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
     bash install.sh
     ```
 
-    The script will guide you through the setup process. Here's what you can expect:
+    The script will guide you through the setup process, including selecting a model based on your primary task (coding, chat, or multimodal).
 
     ```text
     [INFO] Starting LLM Bridge for Claude Code Installer...
     [INFO] Checking for required tools: git, uv, npm, ollama...
-    [SUCCESS] git is installed.
-    [SUCCESS] uv is installed.
-    [SUCCESS] npm is installed.
-    [INFO] ollama is installed.
-    [INFO] Repository already exists at /Users/guychenya/Documents/GitHub-Repos/claude-code-proxy-ollama. Skipping clone.
     [INFO] Configuring environment variables in .env...
-    [INFO] .env file already exists. Skipping creation.
     ?[CHOICE] Choose your preferred LLM provider [ollama]: 
       1) ollama
       2) openai
@@ -41,19 +35,19 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
     #? 1
     [INFO] Set PREFERRED_PROVIDER to ollama in .env.
     [INFO] Ollama selected. No API keys needed for Ollama models.
-    [INFO] Ollama models are typically stored in ~/.ollama/models.
-    [INFO] You can change Ollama's default data directory by setting the OLLAMA_MODELS environment variable system-wide (e.g., in your .bashrc or .zshrc).
-    [INFO] Example: export OLLAMA_MODELS=/path/to/your/ollama/models
-    ?[INPUT] Enter minimum required disk space for Ollama models (GB) [20]: 20
-    [INFO] Sufficient disk space available on '/Users/guychenya/.ollama': 132GB (Required: 20GB).
-    [INFO] Attempting to pull default Ollama models (llama2 and phi) if not present...
-    [INFO] Ollama model 'llama2' already present locally. Skipping pull.
-    [INFO] Ollama model 'phi' already present locally. Skipping pull.
-    [INFO] Now, let's set your default BIG_MODEL and SMALL_MODEL for the proxy.
-    [INFO] These should be models you have installed locally (either pre-existing or just pulled).
-    ?[INPUT] Enter BIG_MODEL for Ollama (e.g., llama2) [llama2]: llama3
-    ?[INPUT] Enter SMALL_MODEL for Ollama (e.g., phi) [phi]: phi
-    [INFO] Set BIG_MODEL and SMALL_MODEL for Ollama in .env.
+    ?[CHOICE] Choose your primary task [coding]: 
+      1) coding
+      2) chat
+      3) multimodal
+    #? 1
+    ?[CHOICE] Choose a coding model to download [codellama:13b]:
+      1) codellama:13b
+      2) deepseek-coder:33b-instruct
+      3) starcoder2:15b
+    #? 1
+    [INFO] Model 'codellama:13b' not found locally. Attempting to pull...
+    [SUCCESS] Successfully pulled Ollama model 'codellama:13b'.
+    [INFO] Set both BIG_MODEL and SMALL_MODEL to 'codellama:13b' in .env.
     [INFO] Installing Python dependencies using uv...
     [SUCCESS] Python dependencies installed.
     [INFO] Installing Claude Code CLI globally using npm...
@@ -62,10 +56,12 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
     [SUCCESS] Proxy server started in the background with PID: 12345. Output logged to proxy_server.log
     [INFO] To stop the server, run: kill 12345
     [SUCCESS] Installation complete!
+    [INFO] Creating 'claudebr' command for easy access...
+    [SUCCESS] 'claudebr' command installed successfully.
 
     --- Next Steps ---
-    1. Run Claude Code CLI, pointing to your proxy:
-       ANTHROPIC_BASE_URL=http://localhost:8082 claude
+    1. Run Claude Code CLI using the new 'claudebr' command:
+       claudebr
 
     Enjoy using Claude Code with your chosen LLM backend!
     ```
@@ -74,12 +70,20 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
 
 Our `install.sh` script isn't just a simple setup; it's packed with features to make your life easier:
 
+-   **Guided Model Selection**: Helps you choose and download the best model for your task (coding, chat, or multimodal).
 -   **Interactive Provider Choice**: Guides you through selecting Ollama, OpenAI, or Gemini as your primary LLM provider.
--   **Simplified Ollama Model Pulling**: If you choose Ollama, it automatically attempts to pull default models (`llama2` and `phi`) if not already present, ensuring a quick start.
--   **Disk Space Guardian**: Before downloading large Ollama models, it checks for sufficient disk space and warns you if space is low, giving you the option to proceed or abort.
--   **Automatic Server Launch**: Automatically starts the proxy server in the background after a successful installation, so you can jump straight into using Claude Code.
--   **Robust Error Handling**: Provides more informative messages if issues like repository cloning failures occur.
--   **Ollama Model Location Info**: Informs you about where Ollama stores its models and how you can configure that location if needed.
+-   **Disk Space Guardian**: Before downloading large Ollama models, it checks for sufficient disk space and warns you if space is low.
+-   **Automatic Server Launch**: Automatically starts the proxy server in the background after a successful installation.
+-   **`claudebr` Command**: Creates a convenient `claudebr` command to run the Claude Code CLI with the local proxy.
+-   **Robust Error Handling**: Provides informative messages for common issues.
+
+## `claudebr` Command
+
+The installer creates a `claudebr` command that simplifies running the Claude Code CLI with the local proxy. Instead of typing `ANTHROPIC_BASE_URL=http://localhost:8082 claude`, you can simply run:
+
+```bash
+claudebr
+```
 
 ## Model Mapping 🧭
 
