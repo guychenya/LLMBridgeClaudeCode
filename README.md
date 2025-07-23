@@ -24,6 +24,9 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
 
     The script will guide you through the setup process, including selecting a model based on your primary task (coding, chat, or multimodal).
 
+    <details>
+    <summary>Click to see installer output example</summary>
+
     ```text
     [INFO] Starting LLM Bridge for Claude Code Installer...
     [INFO] Checking for required tools: git, uv, npm, ollama...
@@ -65,6 +68,7 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
 
     Enjoy using Claude Code with your chosen LLM backend!
     ```
+    </details>
 
 ### What the Installer Does ✨
 
