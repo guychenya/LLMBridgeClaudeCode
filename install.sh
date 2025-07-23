@@ -170,10 +170,47 @@ if [ "$PREFERRED_PROVIDER" == "ollama" ]; then
             fi
         fi
 
-        # Simplified Ollama model pulling
-        log_info "Attempting to pull default Ollama models (llama2 and phi) if not present..."
-        OLLAMA_DEFAULT_MODELS_TO_PULL=("llama2" "phi")
-        for model in "${OLLAMA_DEFAULT_MODELS_TO_PULL[@]}"; do
+        # Define model choices based on task
+        CODING_MODELS="codellama:13b-instruct deepseek-coder:33b-instruct starcoder2:15b phi3:mini llama3:8b-instruct"
+        CHAT_MODELS="llama3:8b-instruct mistral:7b-instruct gemma:7b-instruct phi3:mini dolphin-mistral:7b-v2.7"
+        MULTIMODAL_MODELS="llava:7b minicpm-v:2.5b bakllava:7b"
+
+        # Prompt for primary task
+        TASK_CHOICES="coding chat multimodal"
+        DEFAULT_TASK="coding"
+        prompt_for_choice PRIMARY_TASK "Choose your primary task" "$TASK_CHOICES" "$DEFAULT_TASK"
+
+        SELECTED_MODELS=""
+        DEFAULT_BIG_MODEL=""
+        DEFAULT_SMALL_MODEL=""
+
+        case "$PRIMARY_TASK" in
+            coding)
+                SELECTED_MODELS="$CODING_MODELS"
+                DEFAULT_BIG_MODEL="deepseek-coder:33b-instruct"
+                DEFAULT_SMALL_MODEL="codellama:13b-instruct"
+                ;;
+            chat)
+                SELECTED_MODELS="$CHAT_MODELS"
+                DEFAULT_BIG_MODEL="llama3:8b-instruct"
+                DEFAULT_SMALL_MODEL="mistral:7b-instruct"
+                ;;
+            multimodal)
+                SELECTED_MODELS="$MULTIMODAL_MODELS"
+                DEFAULT_BIG_MODEL="llava:7b"
+                DEFAULT_SMALL_MODEL="minicpm-v:2.5b"
+                ;;
+        esac
+
+        # Prompt for BIG_MODEL
+        prompt_for_choice BIG_MODEL_OLLAMA "Choose a BIG_MODEL for $PRIMARY_TASK tasks" "$SELECTED_MODELS" "$DEFAULT_BIG_MODEL"
+        
+        # Prompt for SMALL_MODEL
+        prompt_for_choice SMALL_MODEL_OLLAMA "Choose a SMALL_MODEL for $PRIMARY_TASK tasks" "$SELECTED_MODELS" "$DEFAULT_SMALL_MODEL"
+
+        # Pull selected models if not present
+        OLLAMA_MODELS_TO_PULL=("$BIG_MODEL_OLLAMA" "$SMALL_MODEL_OLLAMA")
+        for model in "${OLLAMA_MODELS_TO_PULL[@]}"; do
             if ! ollama list | grep -q "$model"; then
                 log_info "Model '$model' not found locally. Attempting to pull..."
                 if ! ollama pull "$model"; then
@@ -186,18 +223,10 @@ if [ "$PREFERRED_PROVIDER" == "ollama" ]; then
             fi
         done
 
-        # Ask user to set BIG_MODEL and SMALL_MODEL based on their choices
-        log_info "Now, let's set your default BIG_MODEL and SMALL_MODEL for the proxy."
-        log_info "These should be models you have installed locally (either pre-existing or just pulled)."
-        
-        BIG_MODEL_OLLAMA=""
-        SMALL_MODEL_OLLAMA=""
-        prompt_for_input BIG_MODEL_OLLAMA "Enter BIG_MODEL for Ollama (e.g., llama2)" "llama2"
-        prompt_for_input SMALL_MODEL_OLLAMA "Enter SMALL_MODEL for Ollama (e.g., phi)" "phi"
-
+        # Update .env with selected models
         sed -i '' "s/^BIG_MODEL=.*/BIG_MODEL=$BIG_MODEL_OLLAMA/" .env
         sed -i '' "s/^SMALL_MODEL=.*/SMALL_MODEL=$SMALL_MODEL_OLLAMA/" .env
-        log_info "Set BIG_MODEL and SMALL_MODEL for Ollama in .env."
+        log_info "Set BIG_MODEL to '$BIG_MODEL_OLLAMA' and SMALL_MODEL to '$SMALL_MODEL_OLLAMA' in .env."
 
     else
         log_warn "Ollama is not installed. Skipping Ollama model download and configuration."
@@ -234,7 +263,7 @@ fi
 log_info "Starting the proxy server in the background..."
 # Use nohup to ensure it runs even if the terminal closes, and redirect output to a log file
 source .venv/bin/activate
-nohup uvicorn server:app --host 0.0.0.0 --port 8082 > proxy_server.log 2>&1 & 
+nohup .venv/bin/uvicorn server:app --host 0.0.0.0 --port 8082 > proxy_server.log 2>&1 & 
 SERVER_PID=$!
 log_success "Proxy server started in the background with PID: $SERVER_PID. Output logged to proxy_server.log"
 log_info "To stop the server, run: kill $SERVER_PID"
@@ -246,6 +275,10 @@ log_info "Creating 'claudebr' command for easy access..."
 cat << 'EOF' > claudebr
 #!/bin/bash
 # Wrapper script to run Claude Code CLI with the local proxy
+
+# Activate the Python virtual environment
+source "$(dirname "$0")/.venv/bin/activate"
+
 ANTHROPIC_BASE_URL=http://localhost:8082 claude "$@"
 EOF
 

@@ -11,10 +11,10 @@
 
 Getting started is a breeze with our interactive `install.sh` script! It handles everything from setting up your environment to configuring your preferred LLM provider.
 
-1.  **Clone the repository** (if you haven't already):
+1.  **Clone the repository**:
     ```bash
     git clone https://github.com/guychenya/LLMBridgeClaudeCode.git
-    cd LLMBridgeClaudeCode # Or whatever you named the cloned directory
+    cd LLMBridgeClaudeCode
     ```
 
 2.  **Run the installer script**:
