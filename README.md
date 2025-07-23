@@ -11,6 +11,12 @@
 
 Getting started is a breeze with our interactive `install.sh` script! It handles everything from setting up your environment to configuring your preferred LLM provider.
 
+**Prerequisite**: This project assumes you have the [Ollama server](https://ollama.com/download) already installed and running on your machine. If not, please download and install it first:
+-   **macOS**: [Download Ollama for macOS](https://ollama.com/download/mac)
+-   **Windows**: [Download Ollama for Windows](https://ollama.com/download/windows)
+-   **Linux**: Follow the instructions on the [Ollama website](https://ollama.com/download/linux)
+
+
 1.  **Clone the repository**:
     ```bash
     git clone https://github.com/guychenya/LLMBridgeClaudeCode.git

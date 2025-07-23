@@ -1,9 +1,6 @@
 #!/bin/bash
 
 # --- Configuration ---
-REPO_URL="https://github.com/guychenya/LLMBridgeClaudeCode.git" # IMPORTANT: Update this to your actual repository URL when you push this project!
-REPO_NAME="claude-code-proxy-ollama"
-INSTALL_DIR="/Users/guychenya/Documents/GitHub-Repos/$REPO_NAME" # Assuming current working directory is where the repo is cloned
 CLAUDE_CODE_CLI="@anthropic-ai/claude-code"
 
 # --- Colors for better output ---
@@ -112,19 +109,11 @@ else
     log_warn "Ollama is not installed. You can still use OpenAI/Gemini, but Ollama models won't work locally."
 fi
 
-# 2. Clone repository if not already in it
-if [ ! -d "$INSTALL_DIR" ]; then
-    log_info "Cloning repository to $INSTALL_DIR..."
-    if ! git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null; then
-        log_error "Failed to clone repository from '$REPO_URL'."
-        log_error "This might mean the repository is unavailable or the URL is incorrect."
-        log_error "Please verify the REPO_URL in the 'install.sh' script or contact the repository creator."
-        exit 1
-    fi
-    log_success "Repository cloned."
-else
-    log_info "Repository already exists at $INSTALL_DIR. Skipping clone."
-fi
+
+
+# Navigate into the project directory
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+ENV_EXAMPLE_PATH="$SCRIPT_DIR/.env.example"
 
 # Navigate into the project directory
 cd "$INSTALL_DIR" || { log_error "Failed to change directory to $INSTALL_DIR. Exiting."; exit 1; }
@@ -132,7 +121,7 @@ cd "$INSTALL_DIR" || { log_error "Failed to change directory to $INSTALL_DIR. Ex
 # 3. Configure .env
 log_info "Configuring environment variables in .env..."
 if [ ! -f ".env" ]; then
-    cp ".env.example" ".env"
+    cp "$ENV_EXAMPLE_PATH" ".env"
     log_info "Created .env file from .env.example."
 else
     log_info ".env file already exists. Skipping creation."
