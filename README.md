@@ -89,6 +89,18 @@ The installer creates a `claudebr` command that simplifies running the Claude Co
 claudebr
 ```
 
+### Global Installation (Optional)
+
+By default, `claudebr` is created in the project directory. If you wish to use `claudebr` from any directory in your terminal, you might need to move it to a directory included in your system's PATH, such as `/usr/local/bin`.
+
+If the installer warns that `/usr/local/bin` is not writable, you can manually move the `claudebr` script using `sudo`:
+
+```bash
+sudo mv claudebr /usr/local/bin/
+```
+
+**Note**: For most users, this global installation is not necessary as you will typically run `claudebr` from within the cloned project's directory.
+
 ## Model Mapping 🧭
 
 This proxy intelligently maps Claude's `haiku` and `sonnet` models to your chosen `SMALL_MODEL` and `BIG_MODEL` respectively. When `PREFERRED_PROVIDER=ollama`, it automatically prefixes your selected Ollama models with `ollama/`.
