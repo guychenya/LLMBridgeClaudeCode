@@ -13,7 +13,7 @@ Getting started is a breeze with our interactive `install.sh` script! It handles
 
 1.  **Clone the repository** (if you haven't already):
     ```bash
-    git clone YOUR_GITHUB_REPO_URL_HERE # Replace with your actual repo URL
+    git clone https://github.com/guychenya/LLMBridgeClaudeCode.git
     cd LLMBridgeClaudeCode # Or whatever you named the cloned directory
     ```
 
