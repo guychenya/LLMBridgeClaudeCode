@@ -1,0 +1,7 @@
+#!/bin/bash
+# Wrapper script to run Claude Code CLI with the local proxy
+
+# Activate the Python virtual environment
+source "$(dirname "$0")/.venv/bin/activate"
+
+ANTHROPIC_BASE_URL=http://localhost:8082 claude "$@"
