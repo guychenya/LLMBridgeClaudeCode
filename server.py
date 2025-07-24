@@ -75,7 +75,18 @@ for handler in logger.handlers:
     if isinstance(handler, logging.StreamHandler):
         handler.setFormatter(ColorizedFormatter('%(asctime)s - %(levelname)s - %(message)s'))
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
+
+# Add CORS middleware to allow all origins for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Get API keys from environment
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -216,9 +227,7 @@ class MessagesRequest(BaseModel):
 
         # Remove provider prefixes for easier matching
         clean_v = v
-        if clean_v.startswith('anthropic/'):
-            clean_v = clean_v[10:]
-        elif clean_v.startswith('openai/'):
+        if clean_v.startswith('openai/'):
             clean_v = clean_v[7:]
         elif clean_v.startswith('gemini/'):
             clean_v = clean_v[7:]
@@ -227,41 +236,40 @@ class MessagesRequest(BaseModel):
 
         # --- Mapping Logic --- START ---
         mapped = False
-        # Map Haiku to SMALL_MODEL based on provider preference
-        if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
-                new_model = f"gemini/{SMALL_MODEL}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "ollama" and SMALL_MODEL in OLLAMA_MODELS:
+        # Explicitly map Anthropic models to preferred provider's BIG/SMALL models
+        if PREFERRED_PROVIDER == "ollama":
+            if any(s in clean_v.lower() for s in ['haiku', 'claude-3-haiku', 'claude-3-5-haiku']):
                 new_model = f"ollama/{SMALL_MODEL}"
                 mapped = True
-            else:
-                new_model = f"openai/{SMALL_MODEL}"
-                mapped = True
-
-        # Map Sonnet to BIG_MODEL based on provider preference
-        elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
-                new_model = f"gemini/{BIG_MODEL}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "ollama" and BIG_MODEL in OLLAMA_MODELS:
+            elif any(s in clean_v.lower() for s in ['sonnet', 'claude-3-sonnet', 'opus', 'claude-3-opus', 'claude-opus-4']):
                 new_model = f"ollama/{BIG_MODEL}"
                 mapped = True
-            else:
+        elif PREFERRED_PROVIDER == "google":
+            if any(s in clean_v.lower() for s in ['haiku', 'claude-3-haiku', 'claude-3-5-haiku']):
+                new_model = f"gemini/{SMALL_MODEL}"
+                mapped = True
+            elif any(s in clean_v.lower() for s in ['sonnet', 'claude-3-sonnet', 'opus', 'claude-3-opus', 'claude-opus-4']):
+                new_model = f"gemini/{BIG_MODEL}"
+                mapped = True
+        elif PREFERRED_PROVIDER == "openai":
+            if any(s in clean_v.lower() for s in ['haiku', 'claude-3-haiku', 'claude-3-5-haiku']):
+                new_model = f"openai/{SMALL_MODEL}"
+                mapped = True
+            elif any(s in clean_v.lower() for s in ['sonnet', 'claude-3-sonnet', 'opus', 'claude-3-opus', 'claude-opus-4']):
                 new_model = f"openai/{BIG_MODEL}"
                 mapped = True
 
-        # Add prefixes to non-mapped models if they match known lists
-        elif not mapped:
+        # If not mapped by preferred provider, try to add prefixes if they match known lists
+        if not mapped:
             if clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
                 new_model = f"gemini/{clean_v}"
-                mapped = True # Technically mapped to add prefix
+                mapped = True
             elif clean_v in OPENAI_MODELS and not v.startswith('openai/'):
                 new_model = f"openai/{clean_v}"
-                mapped = True # Technically mapped to add prefix
+                mapped = True
             elif clean_v in OLLAMA_MODELS and not v.startswith('ollama/'):
                 new_model = f"ollama/{clean_v}"
-                mapped = True # Technically mapped to add prefix
+                mapped = True
         # --- Mapping Logic --- END ---
 
         if mapped:
@@ -300,9 +308,7 @@ class TokenCountRequest(BaseModel):
 
         # Remove provider prefixes for easier matching
         clean_v = v
-        if clean_v.startswith('anthropic/'):
-            clean_v = clean_v[10:]
-        elif clean_v.startswith('openai/'):
+        if clean_v.startswith('openai/'):
             clean_v = clean_v[7:]
         elif clean_v.startswith('gemini/'):
             clean_v = clean_v[7:]
@@ -311,41 +317,40 @@ class TokenCountRequest(BaseModel):
 
         # --- Mapping Logic --- START ---
         mapped = False
-        # Map Haiku to SMALL_MODEL based on provider preference
-        if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
-                new_model = f"gemini/{SMALL_MODEL}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "ollama" and SMALL_MODEL in OLLAMA_MODELS:
+        # Explicitly map Anthropic models to preferred provider's BIG/SMALL models
+        if PREFERRED_PROVIDER == "ollama":
+            if any(s in clean_v.lower() for s in ['haiku', 'claude-3-haiku', 'claude-3-5-haiku']):
                 new_model = f"ollama/{SMALL_MODEL}"
                 mapped = True
-            else:
-                new_model = f"openai/{SMALL_MODEL}"
-                mapped = True
-
-        # Map Sonnet to BIG_MODEL based on provider preference
-        elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
-                new_model = f"gemini/{BIG_MODEL}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "ollama" and BIG_MODEL in OLLAMA_MODELS:
+            elif any(s in clean_v.lower() for s in ['sonnet', 'claude-3-sonnet', 'opus', 'claude-3-opus', 'claude-opus-4']):
                 new_model = f"ollama/{BIG_MODEL}"
                 mapped = True
-            else:
+        elif PREFERRED_PROVIDER == "google":
+            if any(s in clean_v.lower() for s in ['haiku', 'claude-3-haiku', 'claude-3-5-haiku']):
+                new_model = f"gemini/{SMALL_MODEL}"
+                mapped = True
+            elif any(s in clean_v.lower() for s in ['sonnet', 'claude-3-sonnet', 'opus', 'claude-3-opus', 'claude-opus-4']):
+                new_model = f"gemini/{BIG_MODEL}"
+                mapped = True
+        elif PREFERRED_PROVIDER == "openai":
+            if any(s in clean_v.lower() for s in ['haiku', 'claude-3-haiku', 'claude-3-5-haiku']):
+                new_model = f"openai/{SMALL_MODEL}"
+                mapped = True
+            elif any(s in clean_v.lower() for s in ['sonnet', 'claude-3-sonnet', 'opus', 'claude-3-opus', 'claude-opus-4']):
                 new_model = f"openai/{BIG_MODEL}"
                 mapped = True
 
-        # Add prefixes to non-mapped models if they match known lists
-        elif not mapped:
+        # If not mapped by preferred provider, try to add prefixes if they match known lists
+        if not mapped:
             if clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
                 new_model = f"gemini/{clean_v}"
-                mapped = True # Technically mapped to add prefix
+                mapped = True
             elif clean_v in OPENAI_MODELS and not v.startswith('openai/'):
                 new_model = f"openai/{clean_v}"
-                mapped = True # Technically mapped to add prefix
+                mapped = True
             elif clean_v in OLLAMA_MODELS and not v.startswith('ollama/'):
                 new_model = f"ollama/{clean_v}"
-                mapped = True # Technically mapped to add prefix
+                mapped = True
         # --- Mapping Logic --- END ---
 
         if mapped:
@@ -605,8 +610,8 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
 
         for tool in anthropic_request.tools:
             # Convert to dict if it's a pydantic model
-            if hasattr(tool, 'dict'):
-                tool_dict = tool.dict()
+            if hasattr(tool, 'model_dump'):
+                tool_dict = tool.model_dump()
             else:
                 # Ensure tool_dict is a dictionary, handle potential errors if 'tool' isn't dict-like
                 try:
@@ -636,8 +641,8 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
     
     # Convert tool_choice to OpenAI format if present
     if anthropic_request.tool_choice:
-        if hasattr(anthropic_request.tool_choice, 'dict'):
-            tool_choice_dict = anthropic_request.tool_choice.dict()
+        if hasattr(anthropic_request.tool_choice, 'model_dump'):
+            tool_choice_dict = anthropic_request.tool_choice.model_dump()
         else:
             tool_choice_dict = anthropic_request.tool_choice
             
@@ -655,6 +660,15 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
         else:
             # Default to auto if we can't determine
             litellm_request["tool_choice"] = "auto"
+    
+    # Workaround for Ollama tool calling issue: remove tools and tool_choice if preferred provider is Ollama
+    if PREFERRED_PROVIDER == "ollama":
+        if "tools" in litellm_request:
+            del litellm_request["tools"]
+            logger.warning("Removed 'tools' from LiteLLM request for Ollama due to compatibility issues.")
+        if "tool_choice" in litellm_request:
+            del litellm_request["tool_choice"]
+            logger.warning("Removed 'tool_choice' from LiteLLM request for Ollama due to compatibility issues.")
     
     return litellm_request
 
@@ -688,11 +702,11 @@ def convert_litellm_to_anthropic(litellm_response: Union[Dict[str, Any], Any],
             # For backward compatibility - handle dict responses
             # If response is a dict, use it, otherwise try to convert to dict
             try:
-                response_dict = litellm_response if isinstance(litellm_response, dict) else litellm_response.dict()
+                response_dict = litellm_response if isinstance(litellm_response, dict) else litellm_response.model_dump()
             except AttributeError:
-                # If .dict() fails, try to use model_dump or __dict__ 
+                # If .model_dump() fails, try to use __dict__ 
                 try:
-                    response_dict = litellm_response.model_dump() if hasattr(litellm_response, 'model_dump') else litellm_response.__dict__
+                    response_dict = litellm_response.__dict__
                 except AttributeError:
                     # Fallback - manually extract attributes
                     response_dict = {
@@ -1150,12 +1164,21 @@ async def create_message(
             litellm_request["api_key"] = OPENAI_API_KEY
             logger.debug(f"Using OpenAI API key for model: {request.model}")
         elif request.model.startswith("gemini/"):
-            litellm_request["api_key"] = GEMINI_API_KEY
-            logger.debug(f"Using Gemini API key for model: {request.model}")
+            if GEMINI_API_KEY:
+                litellm_request["api_key"] = GEMINI_API_KEY
+                logger.debug(f"Using Gemini API key for model: {request.model}")
+            else:
+                logger.warning(f"GEMINI_API_KEY not set for model: {request.model}")
+        elif PREFERRED_PROVIDER == "ollama": # Explicitly handle Ollama if it's the preferred provider
+            litellm_request["api_key"] = None # No API key needed for Ollama
+            litellm_request["api_base"] = "http://localhost:11434" # Assuming Ollama runs locally
+            logger.debug(f"Using Ollama model: {request.model} (no API key required, forced to local Ollama endpoint)")
         elif request.model.startswith("ollama/"):
+            # This block will be hit if ollama is not the preferred provider, but an ollama model is requested
             # Ollama typically runs locally and doesn't require an API key
-            # litellm_request["api_key"] = None # No API key needed for Ollama
-            logger.debug(f"Using Ollama model: {request.model} (no API key required)")
+            litellm_request["api_key"] = None # No API key needed for Ollama
+            litellm_request["api_base"] = "http://localhost:11434" # Assuming Ollama runs locally
+            logger.debug(f"Using Ollama model: {request.model} (no API key required, forced to local Ollama endpoint)")
         else:
             litellm_request["api_key"] = ANTHROPIC_API_KEY
             logger.debug(f"Using Anthropic API key for model: {request.model}")
@@ -1358,13 +1381,20 @@ async def create_message(
         # Check for LiteLLM-specific attributes
         for attr in ['message', 'status_code', 'response', 'llm_provider', 'model']:
             if hasattr(e, attr):
-                error_details[attr] = getattr(e, attr)
+                value = getattr(e, attr)
+                if attr == 'response' and isinstance(value, httpx.Response):
+                    error_details[attr] = str(value.text)
+                else:
+                    error_details[attr] = value
         
         # Check for additional exception details in dictionaries
         if hasattr(e, '__dict__'):
             for key, value in e.__dict__.items():
                 if key not in error_details and key not in ['args', '__traceback__']:
-                    error_details[key] = str(value)
+                    if isinstance(value, httpx.Response):
+                        error_details[key] = str(value.text) # Convert httpx.Response to string
+                    else:
+                        error_details[key] = str(value)
         
         # Log all error details
         logger.error(f"Error processing request: {json.dumps(error_details, indent=2)}")
@@ -1504,8 +1534,8 @@ def log_request_beautifully(method, path, claude_model, openai_model, num_messag
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "--help":
-        print("Run with: uvicorn server:app --reload --host 0.0.0.0 --port 8082")
+        print("Run with: uvicorn server:app --reload --host 0.0.0.0 --port 8083")
         sys.exit(0)
     
     # Configure uvicorn to run with minimal logs
-    uvicorn.run(app, host="0.0.0.0", port=8082, log_level="error")
+    uvicorn.run(app, host="0.0.0.0", port=8083, log_level="error")

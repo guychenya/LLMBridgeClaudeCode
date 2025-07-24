@@ -252,7 +252,7 @@ fi
 log_info "Starting the proxy server in the background..."
 # Use nohup to ensure it runs even if the terminal closes, and redirect output to a log file
 source .venv/bin/activate
-nohup .venv/bin/uvicorn server:app --host 0.0.0.0 --port 8082 > proxy_server.log 2>&1 & 
+nohup .venv/bin/uvicorn server:app --host 0.0.0.0 --port 8083 > proxy_server.log 2>&1 & 
 SERVER_PID=$!
 log_success "Proxy server started in the background with PID: $SERVER_PID. Output logged to proxy_server.log"
 log_info "To stop the server, run: kill $SERVER_PID"
@@ -268,7 +268,7 @@ cat << 'EOF' > claudebr
 # Activate the Python virtual environment
 source "$(dirname "$0")/.venv/bin/activate"
 
-ANTHROPIC_BASE_URL=http://localhost:8082 claude "$@"
+ANTHROPIC_BASE_URL=http://localhost:8083 claude "$@"
 EOF
 
 chmod +x claudebr

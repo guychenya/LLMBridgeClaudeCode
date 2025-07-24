@@ -31,7 +31,7 @@ load_dotenv()
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 PROXY_API_KEY = os.environ.get("ANTHROPIC_API_KEY")  # Using same key for proxy
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-PROXY_API_URL = "http://localhost:8082/v1/messages"
+PROXY_API_URL = "http://localhost:8083/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 PREFERRED_PROVIDER = os.environ.get("PREFERRED_PROVIDER", "openai").lower()
 MODEL = os.environ.get("TEST_MODEL", "claude-3-sonnet-20240229")  # Model to use for tests

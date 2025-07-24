@@ -89,7 +89,7 @@ Our `install.sh` script isn't just a simple setup; it's packed with features to 
 
 ## `claudebr` Command
 
-The installer creates a `claudebr` command that simplifies running the Claude Code CLI with the local proxy. Instead of typing `ANTHROPIC_BASE_URL=http://localhost:8082 claude`, you can simply run:
+The installer creates a `claudebr` command that simplifies running the Claude Code CLI with the local proxy. Instead of typing `ANTHROPIC_BASE_URL=http://localhost:8083 claude`, you can simply run:
 
 ```bash
 claudebr
