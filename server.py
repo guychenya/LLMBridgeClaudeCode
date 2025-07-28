@@ -652,6 +652,10 @@ async def create_message(
     try:
         litellm_request = convert_anthropic_to_litellm(request)
         
+        # Always set API key to None and base to Ollama for local setup
+        litellm_request["api_key"] = None
+        litellm_request["api_base"] = "http://localhost:11434"
+        
         # Ensure model is prefixed with 'ollama/' for LiteLLM
         if not litellm_request["model"].startswith("ollama/"):
             litellm_request["model"] = f"ollama/{litellm_request['model']}"
