@@ -156,21 +156,65 @@ def convert_anthropic_to_litellm(anthropic_request: MessagesRequest) -> Dict[str
             system_text = ""
             for block in anthropic_request.system:
                 if hasattr(block, 'type') and block.type == "text":
-                    system_text += block.text + "\n\n"
+                    system_text += block.text + "\n\n" # Use \n\n for system messages
                 elif isinstance(block, dict) and block.get("type") == "text":
                     system_text += block.get("text", "") + "\n\n"
             if system_text:
                 messages.append({"role": "system", "content": system_text.strip()})
+
     for msg in anthropic_request.messages:
+        litellm_message = {"role": msg.role}
         if isinstance(msg.content, str):
-            messages.append({"role": msg.role, "content": msg.content})
+            litellm_message["content"] = msg.content
         else:
-            text_content = ""
+            # Handle list of content blocks
+            content_parts = []
+            tool_calls = []
             for block in msg.content:
                 if hasattr(block, 'type') and block.type == "text":
-                    text_content += block.text + "\n"
-            if text_content:
-                messages.append({"role": msg.role, "content": text_content.strip()})
+                    content_parts.append(block.text)
+                elif hasattr(block, 'type') and block.type == "tool_use":
+                    # Convert Anthropic tool_use to LiteLLM (OpenAI) tool_calls format
+                    tool_calls.append({
+                        "id": block.id,
+                        "type": "function",
+                        "function": {
+                            "name": block.name,
+                            "arguments": json.dumps(block.input) # Ensure arguments are a JSON string
+                        }
+                    })
+                elif isinstance(block, dict) and block.get("type") == "text":
+                    content_parts.append(block.get("text", ""))
+                elif isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_calls.append({
+                        "id": block.get("id"),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name"),
+                            "arguments": json.dumps(block.get("input", {}))
+                        }
+                    })
+
+            if content_parts:
+                litellm_message["content"] = "\n".join(content_parts).strip() # Join with newline, then strip
+            else:
+                litellm_message["content"] = None # No text content
+
+            if tool_calls:
+                # If the role is 'assistant' and there are tool calls, add them
+                if msg.role == "assistant":
+                    litellm_message["tool_calls"] = tool_calls
+                # If the role is 'tool', it's a tool output, not a tool call
+                elif msg.role == "tool":
+                    # Anthropic tool output is just text content, so it should be handled by content_parts
+                    # If it's a tool message, its content is the tool's output
+                    pass # Already handled by content_parts
+                else:
+                    # For other roles with tool_use blocks, this is an unexpected scenario
+                    logger.warning(f"Unexpected tool_use block in message with role: {msg.role}")
+
+        messages.append(litellm_message)
+
     litellm_request = {
         "model": anthropic_request.model,
         "messages": messages,
