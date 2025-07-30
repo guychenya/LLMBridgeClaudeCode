@@ -1,7 +1,14 @@
 #!/bin/bash
 # Wrapper script to run Claude Code CLI with the local proxy
 
-# Activate the Python virtual environment
-source "$(dirname "$0")/.venv/bin/activate"
+# Activate the Python virtual environment using an absolute path
+VENV_PATH="/Users/guychenya/Documents/GitHub-Repos/LLMBridgeClaudeCode/.venv/bin/activate"
+if [ -f "$VENV_PATH" ]; then
+    source "$VENV_PATH"
+else
+    echo "Error: Virtual environment not found at $VENV_PATH" >&2
+    exit 1
+fi
 
-ANTHROPIC_BASE_URL=http://localhost:8082 claude "$@"
+# Set the base URL and run the claude command
+ANTHROPIC_BASE_URL=http://localhost:8083 claude ""

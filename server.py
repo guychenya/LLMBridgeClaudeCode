@@ -24,7 +24,16 @@ import re
 from datetime import datetime
 import sys
 
+litellm.set_verbose = True # Set LiteLLM to verbose mode
 
+from app.config.settings import (
+    OLLAMA_API_BASE, ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+    PREFERRED_PROVIDER, BIG_MODEL, SMALL_MODEL, MODEL_ALIAS_MAP,
+    validate_configuration
+)
+
+# Set LiteLLM configuration
+litellm.ollama_api_base = OLLAMA_API_BASE
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -39,16 +48,16 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# Get API keys from environment
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# Validate configuration on startup
+config_issues = validate_configuration()
+if config_issues:
+    logger.warning("Configuration issues found:")
+    for issue in config_issues:
+        logger.warning(f"  - {issue}")
+else:
+    logger.info("Configuration validation passed")
 
-# Get preferred provider (default to openai)
-
-
-# Get model mapping configuration from environment
-# Default to latest OpenAI models if not set
+logger.debug(f"Model Alias Map: {MODEL_ALIAS_MAP}")
 
 
 
@@ -427,266 +436,86 @@ def convert_litellm_to_anthropic(litellm_response: Union[Dict[str, Any], Any],
         )
 
 async def handle_streaming(response_generator, original_request: MessagesRequest):
-    """Handle streaming responses from LiteLLM and convert to Anthropic format."""
+    """Handle streaming responses from LiteLLM and convert to a compliant Anthropic format."""
     try:
-        # Send message_start event
-        message_id = f"msg_{uuid.uuid4().hex[:24]}"  # Format similar to Anthropic's IDs
-        
-        message_data = {
-            'type': 'message_start',
-            'message': {
-                'id': message_id,
-                'type': 'message',
-                'role': 'assistant',
-                'model': original_request.model,
-                'content': [],
-                'stop_reason': None,
-                'stop_sequence': None,
-                'usage': {
-                    'input_tokens': 0,
-                    'cache_creation_input_tokens': 0,
-                    'cache_read_input_tokens': 0,
-                    'output_tokens': 0
-                }
+        # 1. Send message_start
+        message_id = f"msg_{uuid.uuid4()}"
+        message_start_event = {
+            "type": "message_start",
+            "message": {
+                "id": message_id,
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": original_request.model,
+                "stop_reason": None,
+                "stop_sequence": None,
+                "usage": {"input_tokens": 0, "output_tokens": 0}
             }
         }
-        yield f"event: message_start\ndata: {json.dumps(message_data)}\n\n"
-        
-        # Content block index for the first text block
-        yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})}\n\n"
-        
-        # Send a ping to keep the connection alive (Anthropic does this)
-        yield f"event: ping\ndata: {json.dumps({'type': 'ping'})}\n\n"
-        
-        tool_index = None
-        current_tool_call = None
-        tool_content = ""
-        accumulated_text = ""  # Track accumulated text content
-        text_sent = False  # Track if we've sent any text content
-        text_block_closed = False  # Track if text block is closed
-        input_tokens = 0
-        output_tokens = 0
-        has_sent_stop_reason = False
-        last_tool_index = 0
-        
-        # Process each chunk
-        async for chunk in response_generator:
-            try:
+        yield f"event: message_start\ndata: {json.dumps(message_start_event)}\n\n"
 
-                
-                # Check if this is the end of the response with usage data
-                if hasattr(chunk, 'usage') and chunk.usage is not None:
-                    if hasattr(chunk.usage, 'prompt_tokens'):
-                        input_tokens = chunk.usage.prompt_tokens
-                    if hasattr(chunk.usage, 'completion_tokens'):
-                        output_tokens = chunk.usage.completion_tokens
-                
-                # Handle text content
-                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
-                    choice = chunk.choices[0]
-                    
-                    # Get the delta from the choice
-                    if hasattr(choice, 'delta'):
-                        delta = choice.delta
-                    else:
-                        # If no delta, try to get message
-                        delta = getattr(choice, 'message', {})
-                    
-                    # Check for finish_reason to know when we're done
-                    finish_reason = getattr(choice, 'finish_reason', None)
-                    
-                    # Process text content
-                    delta_content = None
-                    
-                    # Handle different formats of delta content
-                    if hasattr(delta, 'content'):
-                        delta_content = delta.content
-                    elif isinstance(delta, dict) and 'content' in delta:
-                        delta_content = delta['content']
-                    
-                    # Accumulate text content
-                    if delta_content is not None and delta_content != "":
-                        accumulated_text += delta_content
-                        
-                        # Always emit text deltas if no tool calls started
-                        if tool_index is None and not text_block_closed:
-                            text_sent = True
-                            yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': delta_content}})}\n\n"
-                    
-                    # Process tool calls
-                    delta_tool_calls = None
-                    
-                    # Handle different formats of tool calls
-                    if hasattr(delta, 'tool_calls'):
-                        delta_tool_calls = delta.tool_calls
-                    elif isinstance(delta, dict) and 'tool_calls' in delta:
-                        delta_tool_calls = delta['tool_calls']
-                    
-                    # Process tool calls if any
-                    if delta_tool_calls:
-                        # First tool call we've seen - need to handle text properly
-                        if tool_index is None:
-                            # If we've been streaming text, close that text block
-                            if text_sent and not text_block_closed:
-                                text_block_closed = True
-                                yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-                            # If we've accumulated text but not sent it, we need to emit it now
-                            # This handles the case where the first delta has both text and a tool call
-                            elif accumulated_text and not text_sent and not text_block_closed:
-                                # Send the accumulated text
-                                text_sent = True
-                                yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': accumulated_text}})}\n\n"
-                                # Close the text block
-                                text_block_closed = True
-                                yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-                            # Close text block even if we haven't sent anything - models sometimes emit empty text blocks
-                            elif not text_block_closed:
-                                text_block_closed = True
-                                yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-                                
-                        # Convert to list if it's not already
-                        if not isinstance(delta_tool_calls, list):
-                            delta_tool_calls = [delta_tool_calls]
-                        
-                        for tool_call in delta_tool_calls:
-                            # Get the index of this tool call (for multiple tools)
-                            current_index = None
-                            if isinstance(tool_call, dict) and 'index' in tool_call:
-                                current_index = tool_call['index']
-                            elif hasattr(tool_call, 'index'):
-                                current_index = tool_call.index
-                            else:
-                                current_index = 0
-                            
-                            # Check if this is a new tool or a continuation
-                            if tool_index is None or current_index != tool_index:
-                                # New tool call - create a new tool_use block
-                                tool_index = current_index
-                                last_tool_index += 1
-                                anthropic_tool_index = last_tool_index
-                                
-                                # Extract function info
-                                if isinstance(tool_call, dict):
-                                    function = tool_call.get('function', {})
-                                    name = function.get('name', '') if isinstance(function, dict) else ""
-                                    tool_id = tool_call.get('id', f"toolu_{uuid.uuid4().hex[:24]}")
-                                else:
-                                    function = getattr(tool_call, 'function', None)
-                                    name = getattr(function, 'name', '') if function else ''
-                                    tool_id = getattr(tool_call, 'id', f"toolu_{uuid.uuid4().hex[:24]}")
-                                
-                                # Start a new tool_use block
-                                yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': anthropic_tool_index, 'content_block': {'type': 'tool_use', 'id': tool_id, 'name': name, 'input': {}}})}\n\n"
-                                current_tool_call = tool_call
-                                tool_content = ""
-                            
-                            # Extract function arguments
-                            arguments = None
-                            if isinstance(tool_call, dict) and 'function' in tool_call:
-                                function = tool_call.get('function', {})
-                                arguments = function.get('arguments', '') if isinstance(function, dict) else ''
-                            elif hasattr(tool_call, 'function'):
-                                function = getattr(tool_call, 'function', None)
-                                arguments = getattr(function, 'arguments', '') if function else ''
-                            
-                            # If we have arguments, send them as a delta
-                            if arguments:
-                                # Try to detect if arguments are valid JSON or just a fragment
-                                try:
-                                    # If it's already a dict, use it
-                                    if isinstance(arguments, dict):
-                                        args_json = json.dumps(arguments)
-                                    else:
-                                        # Otherwise, try to parse it
-                                        json.loads(arguments)
-                                        args_json = arguments
-                                except (json.JSONDecodeError, TypeError):
-                                    # If it's a fragment, treat it as a string
-                                    args_json = arguments
-                                
-                                # Add to accumulated tool content
-                                tool_content += args_json if isinstance(args_json, str) else ""
-                                
-                                # Send the update
-                                yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': anthropic_tool_index, 'delta': {'type': 'input_json_delta', 'partial_json': args_json}})}\n\n"
-                    
-                    # Process finish_reason - end the streaming response
-                    if finish_reason and not has_sent_stop_reason:
-                        has_sent_stop_reason = True
-                        
-                        # Close any open tool call blocks
-                        if tool_index is not None:
-                            for i in range(1, last_tool_index + 1):
-                                yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': i})}\n\n"
-                        
-                        # If we accumulated text but never sent or closed text block, do it now
-                        if not text_block_closed:
-                            if accumulated_text and not text_sent:
-                                # Send the accumulated text
-                                yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': accumulated_text}})}\n\n"
-                            # Close the text block
-                            yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-                        
-                        # Map OpenAI finish_reason to Anthropic stop_reason
-                        stop_reason = "end_turn"
-                        if finish_reason == "length":
-                            stop_reason = "max_tokens"
-                        elif finish_reason == "tool_calls":
-                            stop_reason = "tool_use"
-                        elif finish_reason == "stop":
-                            stop_reason = "end_turn"
-                        
-                        # Send message_delta with stop reason and usage
-                        usage = {"output_tokens": output_tokens}
-                        
-                        yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': stop_reason, 'stop_sequence': None}, 'usage': usage})}\n\n"
-                        
-                        # Send message_stop event
-                        yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n"
-                        
-                        # Send final [DONE] marker to match Anthropic's behavior
-                        yield "data: [DONE]\n\n"
-                        return
-            except Exception as e:
-                # Log error but continue processing other chunks
-                logger.error(f"Error processing chunk: {str(e)}")
-                continue
-        
-        # If we didn't get a finish reason, close any open blocks
-        if not has_sent_stop_reason:
-            # Close any open tool call blocks
-            if tool_index is not None:
-                for i in range(1, last_tool_index + 1):
-                    yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': i})}\n\n"
-            
-            # Close the text content block
-            yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-            
-            # Send final message_delta with usage
-            usage = {"output_tokens": output_tokens}
-            
-            yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'end_turn', 'stop_sequence': None}, 'usage': usage})}\n\n"
-            
-            # Send message_stop event
-            yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n"
-            
-            # Send final [DONE] marker to match Anthropic's behavior
-            yield "data: [DONE]\n\n"
-    
+        # 2. Send content_block_start
+        content_block_start_event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""}
+        }
+        yield f"event: content_block_start\ndata: {json.dumps(content_block_start_event)}\n\n"
+
+        # 3. Stream content_block_delta
+        finish_reason = None
+        output_tokens = 0
+        input_tokens = 0
+
+        async for chunk in response_generator:
+            if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                choice = chunk.choices[0]
+                if hasattr(choice, 'delta') and getattr(choice.delta, 'content', None):
+                    delta_content = choice.delta.content
+                    text_delta_event = {
+                        'type': 'content_block_delta',
+                        'index': 0,
+                        'delta': {'type': 'text_delta', 'text': delta_content}
+                    }
+                    yield f"event: content_block_delta\ndata: {json.dumps(text_delta_event)}\n\n"
+
+                if getattr(choice, 'finish_reason', None):
+                    finish_reason = choice.finish_reason
+
+            if hasattr(chunk, 'usage'):
+                if hasattr(chunk.usage, 'prompt_tokens'):
+                    input_tokens = chunk.usage.prompt_tokens
+                if hasattr(chunk.usage, 'completion_tokens'):
+                    output_tokens = chunk.usage.completion_tokens
+
     except Exception as e:
-        import traceback
-        error_traceback = traceback.format_exc()
-        error_message = f"Error in streaming: {str(e)}\n\nFull traceback:\n{error_traceback}"
-        logger.error(error_message)
-        
-        # Send error message_delta
-        yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'error', 'stop_sequence': None}, 'usage': {'output_tokens': 0}})}\n\n"
-        
-        # Send message_stop event
-        yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n"
-        
-        # Send final [DONE] marker
-        yield "data: [DONE]\n\n"
+        logger.error(f"Error during stream processing: {e}")
+        error_event = {"type": "error", "error": {"type": "internal_server_error", "message": str(e)}}
+        yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+        finish_reason = "error"
+
+    # 4. Send content_block_stop
+    content_block_stop_event = {"type": "content_block_stop", "index": 0}
+    yield f"event: content_block_stop\ndata: {json.dumps(content_block_stop_event)}\n\n"
+
+    # 5. Send message_delta
+    stop_reason_map = {"length": "max_tokens", "tool_calls": "tool_use", "stop": "end_turn"}
+    stop_reason = stop_reason_map.get(finish_reason, "end_turn")
+
+    message_delta_event = {
+        "type": "message_delta",
+        "delta": {"stop_reason": stop_reason, "stop_sequence": None},
+        "usage": {"output_tokens": output_tokens}
+    }
+    yield f"event: message_delta\ndata: {json.dumps(message_delta_event)}\n\n"
+
+    # 6. Send message_stop
+    message_stop_event = {"type": "message_stop"}
+    yield f"event: message_stop\ndata: {json.dumps(message_stop_event)}\n\n"
+
+    # LiteLLM proxy client expects a [DONE] message to terminate.
+    yield "data: [DONE]\n\n"
 
 @app.post("/v1/messages")
 async def create_message(
@@ -696,23 +525,35 @@ async def create_message(
     try:
         litellm_request = convert_anthropic_to_litellm(request)
         
-        # Always set API key to None and base to Ollama for local setup
-        litellm_request["api_key"] = None
-        litellm_request["api_base"] = "http://localhost:11434"
+        logger.debug(f"LiteLLM Request: {litellm_request}")
         
-        # Ensure model is prefixed with 'ollama/' for LiteLLM
-        if not litellm_request["model"].startswith("ollama/"):
-            litellm_request["model"] = f"ollama/{litellm_request['model']}"
+        # Map Anthropic model names to configured models
+        requested_model = litellm_request["model"]
+        if requested_model in MODEL_ALIAS_MAP:
+            litellm_request["model"] = f"ollama/{MODEL_ALIAS_MAP[requested_model]}"
+            logger.debug(f"Mapped Anthropic model '{requested_model}' to model '{litellm_request['model']}'")
+        elif not requested_model.startswith("ollama/") and not requested_model.startswith("openai/") and not requested_model.startswith("gemini/"):
+            # Fallback for models not explicitly mapped, prefix with ollama/
+            litellm_request["model"] = f"ollama/{requested_model}"
+            logger.debug(f"Prefixed model '{requested_model}' with 'ollama/' as no explicit mapping or provider prefix was found.")
 
         # Separate logic for streaming and non-streaming
         if request.stream:
-            response_generator = await litellm.acompletion(**litellm_request)
+            response_generator = await litellm.acompletion(
+                **litellm_request,
+                api_base=OLLAMA_API_BASE, # Explicitly pass api_base
+                api_key="EMPTY" # Explicitly pass api_key (Ollama doesn't use it, but LiteLLM might expect it)
+            )
             return StreamingResponse(
                 handle_streaming(response_generator, request),
                 media_type="text/event-stream"
             )
         else:
-            litellm_response = await litellm.acompletion(**litellm_request)
+            litellm_response = await litellm.acompletion(
+                **litellm_request,
+                api_base=OLLAMA_API_BASE, # Explicitly pass api_base
+                api_key="EMPTY" # Explicitly pass api_key
+            )
             anthropic_response = convert_litellm_to_anthropic(litellm_response, request)
             return anthropic_response
     except Exception as e:
@@ -797,5 +638,3 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--help":
         print("Run with: uvicorn server:app --reload --host 0.0.0.0 --port 8083")
         sys.exit(0)
-    
-    

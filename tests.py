@@ -34,7 +34,12 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 PROXY_API_URL = "http://localhost:8083/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 PREFERRED_PROVIDER = os.environ.get("PREFERRED_PROVIDER", "openai").lower()
-MODEL = os.environ.get("TEST_MODEL", "claude-3-sonnet-20240229")  # Model to use for tests
+
+# Set the model based on the preferred provider
+if PREFERRED_PROVIDER == "ollama":
+    MODEL = os.environ.get("TEST_MODEL", "codellama:13b")
+else:
+    MODEL = os.environ.get("TEST_MODEL", "claude-3-sonnet-20240229")  # Model to use for tests
 
 # Headers
 anthropic_headers = {

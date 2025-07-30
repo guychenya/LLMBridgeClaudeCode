@@ -113,7 +113,6 @@ fi
 
 # Navigate into the project directory
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-ENV_EXAMPLE_PATH="$SCRIPT_DIR/.env.example"
 
 # Navigate into the project directory
 cd "$INSTALL_DIR" || { log_error "Failed to change directory to $INSTALL_DIR. Exiting."; exit 1; }
@@ -121,8 +120,17 @@ cd "$INSTALL_DIR" || { log_error "Failed to change directory to $INSTALL_DIR. Ex
 # 3. Configure .env
 log_info "Configuring environment variables in .env..."
 if [ ! -f ".env" ]; then
-    cp "$ENV_EXAMPLE_PATH" ".env"
-    log_info "Created .env file from .env.example."
+    # Try to use config.env.example if .env.example doesn't exist
+    if [ -f "config.env.example" ]; then
+        cp "config.env.example" ".env"
+        log_info "Created .env file from config.env.example."
+    elif [ -f ".env.example" ]; then
+        cp ".env.example" ".env"
+        log_info "Created .env file from .env.example."
+    else
+        log_warn "No .env.example or config.env.example found. Running setup script..."
+        python3 setup_config.py
+    fi
 else
     log_info ".env file already exists. Skipping creation."
 fi
@@ -261,13 +269,26 @@ log_success "Installation complete!"
 
 # 7. Create the 'claudebr' command
 log_info "Creating 'claudebr' command for easy access..."
-cat << 'EOF' > claudebr
+
+# Get the absolute path of the script's directory
+INSTALL_DIR_ABS="$(pwd)"
+
+log_info "Creating 'claudebr' command with absolute path: $INSTALL_DIR_ABS"
+
+cat << EOF > claudebr
 #!/bin/bash
 # Wrapper script to run Claude Code CLI with the local proxy
 
-# Activate the Python virtual environment
-source "$(dirname "$0")/.venv/bin/activate"
+# Activate the Python virtual environment using an absolute path
+VENV_PATH="$INSTALL_DIR_ABS/.venv/bin/activate"
+if [ -f "\$VENV_PATH" ]; then
+    source "\$VENV_PATH"
+else
+    echo "Error: Virtual environment not found at \$VENV_PATH" >&2
+    exit 1
+fi
 
+# Set the base URL and run the claude command
 ANTHROPIC_BASE_URL=http://localhost:8083 claude "$@"
 EOF
 
